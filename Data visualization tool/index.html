@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bioacoustics Explorer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .section {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        .section:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        select, button {
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #ecf0f1;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        audio {
+            width: 100%;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        canvas {
+            display: block;
+            background-color: #2c3e50; /* Dark background for better contrast */
+            border-radius: 5px;
+            margin-bottom: 15px;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+        }
+        label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .feature-card {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            z-index: 1000;
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        Loading audio...
+    </div>
+
+    <div class="container">
+        <h1>Bioacoustics Dataset Explorer</h1>
+
+        <div class="section">
+            <h2>Audio Selection & Playback</h2>
+            <div class="controls">
+                <label for="audioSelect">Choose Audio:</label>
+                <select id="audioSelect"></select>
+                <button id="playButton">Play</button>
+                <button id="pauseButton">Pause</button>
+            </div>
+            <audio id="audioPlayer" controls></audio>
+        </div>
+
+        <div class="section">
+            <h2>Waveform</h2>
+            <canvas id="waveformCanvas" width="1000" height="200"></canvas>
+        </div>
+
+        <div class="section">
+            <h2>Spectrogram</h2>
+            <canvas id="spectrogramCanvas" width="1000" height="400"></canvas>
+            <p style="font-size: 0.9em; color: #555;">(Note: Spectrogram generation in-browser is computationally intensive. It might take a moment for longer files.)</p>
+        </div>
+
+        <div class="section">
+            <h2>Simulated Acoustic Feature Distributions</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>RMS Energy (Time)</h3>
+                    <canvas id="rmsCanvas" width="300" height="150"></canvas>
+                    <p>Represents the overall loudness/intensity over time.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>Zero-Crossing Rate (ZCR)</h3>
+                    <canvas id="zcrCanvas" width="300" height="150"></canvas>
+                    <p>Indicates the frequency content of the signal (high for noisy/high-pitched sounds).</p>
+                </div>
+                <!-- You could add more here, e.g., Pitch Histogram, Spectral Centroid, etc. -->
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Dataset Information</h2>
+            <p><strong>Current File:</strong> <span id="currentFileName">None selected</span></p>
+            <p><strong>Duration:</strong> <span id="currentFileDuration">0:00</span></p>
+            <p><strong>Simulated Tags:</strong> <span id="simulatedTags">No tags available.</span></p>
+        </div>
+
+    </div>
+
+    <script>
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioSelect = document.getElementById('audioSelect');
+        const waveformCanvas = document.getElementById('waveformCanvas');
+        const spectrogramCanvas = document.getElementById('spectrogramCanvas');
+        const rmsCanvas = document.getElementById('rmsCanvas');
+        const zcrCanvas = document.getElementById('zcrCanvas');
+        const currentFileNameSpan = document.getElementById('currentFileName');
+        const currentFileDurationSpan = document.getElementById('currentFileDuration');
+        const simulatedTagsSpan = document.getElementById('simulatedTags');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+
+        const audioFiles = [
+            'audio/2018_CORI-1_20180611-020000_1.flac', // Replace with your actual audio file paths
+            'audio/2018_CORI-1_20180611-020000_2.flac',
+            'audio/2018_CORI-1_20180611-020000_3.flac',
+            // Add more files here as 'audio/your_file.ext'
+        ];
+
+        let currentAudioBuffer = null;
+        let analyserNode = null;
+
+        // --- Utility Functions ---
+
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+        }
+
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+        }
+
+        function formatDuration(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+        }
+
+        // --- Audio Processing & Visualization ---
+
+        async function loadAudio(url) {
+            showLoading();
+            try {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                currentAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                hideLoading();
+                return currentAudioBuffer;
+            } catch (error) {
+                console.error("Error loading audio:", error);
+                alert("Could not load audio file. Check console for details.");
+                hideLoading();
+                return null;
+            }
+        }
+
+        function drawWaveform(buffer, canvas) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const data = buffer.getChannelData(0); // Use first channel
+
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#2c3e50'; // Background
+            ctx.fillRect(0, 0, width, height);
+            ctx.strokeStyle = '#3498db'; // Waveform color
+            ctx.lineWidth = 2;
+
+            const sliceWidth = width * 1.0 / data.length;
+            let x = 0;
+
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+
+            for (let i = 0; i < data.length; i++) {
+                const v = data[i] * (height / 2);
+                ctx.lineTo(x, height / 2 + v);
+                x += sliceWidth;
+            }
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+        }
+
+        function drawSpectrogram(buffer, canvas) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, width, height);
+
+            const channelData = buffer.getChannelData(0);
+            const sampleRate = buffer.sampleRate;
+            const fftSize = 1024; // Power of 2
+            const hopSize = fftSize / 4; // Overlap
+
+            const numFrames = Math.floor((channelData.length - fftSize) / hopSize);
+            const freqBins = fftSize / 2; // Nyquist limit
+
+            // Create a temporary analyser node for FFT
+            if (!analyserNode) {
+                analyserNode = audioContext.createAnalyser();
+                analyserNode.fftSize = fftSize;
+            }
+            const freqByteData = new Uint8Array(analyserNode.frequencyBinCount);
+
+            const maxFreq = sampleRate / 2;
+            const minDb = -100; // Minimum dB for visualization
+            const maxDb = 0;    // Maximum dB for visualization
+
+            // Draw a simplified spectrogram. For full accuracy, you'd need to window and FFT each frame
+            // This is an approximation for visualization
+            const pixelsPerFrame = width / numFrames;
+            const pixelsPerBin = height / freqBins;
+
+            for (let i = 0; i < numFrames; i++) {
+                const frameStart = i * hopSize;
+                const frameEnd = frameStart + fftSize;
+                const frameData = channelData.slice(frameStart, frameEnd);
+
+                // Simulate FFT - in a real scenario, you'd pass this to a proper FFT function
+                // For simplicity, we'll just average magnitude in bands
+                // This is a *very* crude approximation for a real spectrogram
+                // A proper client-side spectrogram requires libraries like p5.js or writing FFT from scratch.
+                // For this demo, let's just make sure something visually plausible appears.
+
+                // Instead of a true FFT here, we'll draw based on the frequency content approximation.
+                // This part is the most complex client-side. Let's simplify:
+                // We'll calculate a 'brightness' for bands based on amplitude.
+                // This will NOT be a true spectrogram but will demonstrate the concept.
+                const frameMagnitudes = new Array(freqBins).fill(0);
+                for(let j=0; j < frameData.length; j++) {
+                    const freqIndex = Math.floor((j / frameData.length) * freqBins);
+                    frameMagnitudes[freqIndex] += Math.abs(frameData[j]);
+                }
+                
+                // Scale magnitudes to dB-like values for color mapping
+                const maxMag = Math.max(...frameMagnitudes);
+                for (let j = 0; j < freqBins; j++) {
+                    let intensity = frameMagnitudes[j] / maxMag; // Normalize to 0-1
+                    if (isNaN(intensity)) intensity = 0;
+                    
+                    // Simple color mapping (blue for low, red for high intensity)
+                    const hue = (1 - intensity) * 240; // 240 is blue, 0 is red
+                    const color = `hsl(${hue}, 100%, ${50 + intensity * 40}%)`; // Saturation, Lightness
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(i * pixelsPerFrame, height - (j * pixelsPerBin), pixelsPerFrame, pixelsPerBin + 1);
+                }
+            }
+        }
+
+
+        function drawRMS(buffer, canvas) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#ecf0f1';
+            ctx.fillRect(0, 0, width, height);
+            ctx.strokeStyle = '#e67e22'; // Orange
+            ctx.lineWidth = 2;
+
+            const channelData = buffer.getChannelData(0);
+            const samplesPerWindow = Math.floor(buffer.sampleRate / 10); // 100ms windows
+            const numWindows = Math.floor(channelData.length / samplesPerWindow);
+
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+
+            for (let i = 0; i < numWindows; i++) {
+                let sumOfSquares = 0;
+                for (let j = 0; j < samplesPerWindow; j++) {
+                    const sample = channelData[i * samplesPerWindow + j];
+                    sumOfSquares += sample * sample;
+                }
+                const rms = Math.sqrt(sumOfSquares / samplesPerWindow);
+                const x = (i / numWindows) * width;
+                const y = height - (rms * height); // Scale RMS to canvas height
+                ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        function drawZCR(buffer, canvas) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#ecf0f1';
+            ctx.fillRect(0, 0, width, height);
+            ctx.strokeStyle = '#9b59b6'; // Purple
+            ctx.lineWidth = 2;
+
+            const channelData = buffer.getChannelData(0);
+            const samplesPerWindow = Math.floor(buffer.sampleRate / 10); // 100ms windows
+            const numWindows = Math.floor(channelData.length / samplesPerWindow);
+
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+
+            for (let i = 0; i < numWindows; i++) {
+                let zeroCrossings = 0;
+                for (let j = 0; j < samplesPerWindow - 1; j++) {
+                    const s1 = channelData[i * samplesPerWindow + j];
+                    const s2 = channelData[i * samplesPerWindow + j + 1];
+                    if ((s1 >= 0 && s2 < 0) || (s1 < 0 && s2 >= 0)) {
+                        zeroCrossings++;
+                    }
+                }
+                const zcr = zeroCrossings / samplesPerWindow; // Normalize
+                const x = (i / numWindows) * width;
+                const y = height - (zcr * height); // Scale ZCR to canvas height
+                ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+
+        // --- UI Initialization and Event Listeners ---
+
+        function populateAudioSelect() {
+            audioFiles.forEach((file, index) => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file.split('/').pop(); // Display just the filename
+                audioSelect.appendChild(option);
+            });
+        }
+
+        async function updateVisualizations(buffer) {
+            if (!buffer) return;
+
+            drawWaveform(buffer, waveformCanvas);
+            drawSpectrogram(buffer, spectrogramCanvas); // This is the slow one
+            drawRMS(buffer, rmsCanvas);
+            drawZCR(buffer, zcrCanvas);
+
+            currentFileDurationSpan.textContent = formatDuration(buffer.duration);
+
+            // Simulate tags based on filename (for demo purposes)
+            const filename = audioSelect.options[audioSelect.selectedIndex].textContent;
+            let tags = "_To_add_";
+            if (filename.includes('bird_song_1')) {
+                tags = "Chipping Sparrow, Dawn Chorus";
+            } else if (filename.includes('no_bird')) {
+                tags = "No birds detected, Ambient forest noise";
+            } else if (filename.includes('multiple_birds')) {
+                tags = "American Robin, Blue Jay, Northern Cardinal";
+            }
+            simulatedTagsSpan.textContent = tags;
+        }
+
+        audioSelect.addEventListener('change', async (event) => {
+            const selectedFile = event.target.value;
+            audioPlayer.src = selectedFile;
+            currentFileNameSpan.textContent = selectedFile.split('/').pop();
+            currentAudioBuffer = await loadAudio(selectedFile);
+            if (currentAudioBuffer) {
+                updateVisualizations(currentAudioBuffer);
+            }
+        });
+
+        document.getElementById('playButton').addEventListener('click', () => {
+            audioPlayer.play();
+        });
+
+        document.getElementById('pauseButton').addEventListener('click', () => {
+            audioPlayer.pause();
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            populateAudioSelect();
+            if (audioFiles.length > 0) {
+                audioSelect.value = audioFiles[0];
+                currentFileNameSpan.textContent = audioFiles[0].split('/').pop();
+                audioPlayer.src = audioFiles[0];
+                currentAudioBuffer = await loadAudio(audioFiles[0]);
+                if (currentAudioBuffer) {
+                    updateVisualizations(currentAudioBuffer);
+                }
+            } else {
+                alert("Please add audio files to the 'audioFiles' array in the script and ensure they are in the 'audio/' subfolder.");
+            }
+        });
+
+    </script>
+</body>
+</html>
