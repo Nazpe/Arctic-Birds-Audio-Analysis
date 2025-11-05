@@ -274,8 +274,7 @@
             const minDb = -100; // Minimum dB for visualization
             const maxDb = 0;    // Maximum dB for visualization
 
-            // Draw a simplified spectrogram. For full accuracy, you'd need to window and FFT each frame
-            // This is an approximation for visualization
+            // Draw a simplified spectrogram. This is an approximation for visualization
             const pixelsPerFrame = width / numFrames;
             const pixelsPerBin = height / freqBins;
 
@@ -284,16 +283,9 @@
                 const frameEnd = frameStart + fftSize;
                 const frameData = channelData.slice(frameStart, frameEnd);
 
-                // Simulate FFT - in a real scenario, you'd pass this to a proper FFT function
+                // Simulate FFT - 
                 // For simplicity, we'll just average magnitude in bands
                 // This is a *very* crude approximation for a real spectrogram
-                // A proper client-side spectrogram requires libraries like p5.js or writing FFT from scratch.
-                // For this demo, let's just make sure something visually plausible appears.
-
-                // Instead of a true FFT here, we'll draw based on the frequency content approximation.
-                // This part is the most complex client-side. Let's simplify:
-                // We'll calculate a 'brightness' for bands based on amplitude.
-                // This will NOT be a true spectrogram but will demonstrate the concept.
                 const frameMagnitudes = new Array(freqBins).fill(0);
                 for(let j=0; j < frameData.length; j++) {
                     const freqIndex = Math.floor((j / frameData.length) * freqBins);
@@ -404,15 +396,15 @@
 
             currentFileDurationSpan.textContent = formatDuration(buffer.duration);
 
-            // Simulate tags based on filename (for demo purposes)
+            // Simulate tags (for demo purposes)
             const filename = audioSelect.options[audioSelect.selectedIndex].textContent;
             let tags = "_To_add_";
             if (filename.includes('bird_song_1')) {
-                tags = "Chipping Sparrow, Dawn Chorus";
-            } else if (filename.includes('no_bird')) {
-                tags = "No birds detected, Ambient forest noise";
-            } else if (filename.includes('multiple_birds')) {
-                tags = "American Robin, Blue Jay, Northern Cardinal";
+                tags = "Tag_1";
+            } else if (filename.includes('bird_song_2')) {
+                tags = "Tag_2";
+            } else if (filename.includes('bird_song_3')) {
+                tags = "Tag_3";
             }
             simulatedTagsSpan.textContent = tags;
         }
@@ -447,7 +439,7 @@
                     updateVisualizations(currentAudioBuffer);
                 }
             } else {
-                alert("Please add audio files to the 'audioFiles' array in the script and ensure they are in the 'audio/' subfolder.");
+                alert("Add audio files to the 'audioFiles' array in the script and ensure they are in the 'audio/' subfolder.");
             }
         });
 
